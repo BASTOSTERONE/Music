@@ -56,6 +56,10 @@ class Concert(db.Model):
     reservations = db.relationship('Reservation', backref='concert', lazy=True)
     commentaires = db.relationship('Commentaire', backref='concert', lazy=True)
 
+    @property
+    def verifier_si_passe(self):
+        return self.date_concert < datetime.utcnow()
+
 class Reservation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nb_places = db.Column(db.Integer, nullable=False)
@@ -138,10 +142,10 @@ def init_data():
     db.session.add_all([actu1, actu2])
 
     from datetime import datetime
-    c1 = Concert(nom="Arctic Monkeys", date_concert=datetime(2026, 4, 28, 20, 0), lieu="Lyon", type_musique="Rock", places_totales=5000, places_dispos=4000, description="La tournée européenne passe par la région !", est_passe=False)
-    c2 = Concert(nom="Daft Punk Tribute", date_concert=datetime(2026, 8, 15, 23, 0), lieu="Annecy", type_musique="Electro", places_totales=1500, places_dispos=1500, description="Une nuit inoubliable.", est_passe=False)
+    c1 = Concert(nom="Arctic Monkeys", date_concert=datetime(2025, 4, 28, 20, 0), lieu="Lyon", type_musique="Rock", places_totales=5000, places_dispos=4000, description="La tournée européenne passe par la région !", est_passe=True)
+    c2 = Concert(nom="Daft Punk Tribute", date_concert=datetime(2026, 6, 28, 23, 0), lieu="Annecy", type_musique="Electro", places_totales=1500, places_dispos=1500, description="Une nuit inoubliable.", est_passe=False)
     # Correction de l'année 202 ici :
-    c3 = Concert(nom="Marcus Miller", date_concert=datetime(2026, 5, 7, 20, 30), lieu="Chambéry", type_musique="Jazz", places_totales=800, places_dispos=0, description="Concert exceptionnel du maître de la basse.", est_passe=True)
+    c3 = Concert(nom="Marcus Miller", date_concert=datetime(2026, 5, 7, 20, 30), lieu="Chambéry", type_musique="Jazz", places_totales=800, places_dispos=0, description="Concert exceptionnel du maître de la basse.", est_passe=False)
     db.session.add_all([c1, c2, c3])
 
     db.session.commit()
@@ -150,7 +154,7 @@ def init_data():
 # --- ROUTE DES CONCERTS ---
 @app.route('/concerts')
 def concerts():
-    query = Concert.query.filter_by(est_passe=False)
+    query = Concert.query 
     
     filtre_type = request.args.get('type')
     filtre_lieu = request.args.get('lieu')
@@ -160,7 +164,7 @@ def concerts():
     if filtre_lieu:
         query = query.filter_by(lieu=filtre_lieu)
         
-    liste_concerts = query.order_by(Concert.date_concert.asc()).all()
+    liste_concerts = query.order_by(Concert.date_concert.desc()).all()
     
     lieux_uniques = [l[0] for l in db.session.query(Concert.lieu).distinct().all()]
     types_uniques = [t[0] for t in db.session.query(Concert.type_musique).distinct().all()]
