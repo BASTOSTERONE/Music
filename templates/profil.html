@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mon Profil - MusiActu</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+    <div class="container mt-4">
+        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">⬅ Retour Accueil</a>
+    </div>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-4 mb-4">
+                <div class="card shadow-sm border-0">
+                    <div class="card-body text-center">
+                        <div class="display-1 text-primary mb-3">👤</div>
+                        <h3 class="card-title">{{ current_user.username }}</h3>
+                        <p class="text-muted">Membre de MusiActu</p>
+                        {% if current_user.is_admin %}
+                            <span class="badge bg-danger">Administrateur</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-8">
+                <h3 class="text-success border-bottom pb-2 mb-4">Mes Billets Réservés 🎟️</h3>
+                
+                <div class="list-group shadow-sm">
+                    {% for resa in reservations %}
+                        <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            <div>
+                                <h5 class="mb-1 text-primary">{{ resa.concert.nom }}</h5>
+                                <p class="mb-0 text-muted">
+                                    📅 {{ resa.concert.date_concert.strftime('%d/%m/%Y à %H:%M') }} | 📍 {{ resa.concert.lieu }}
+                                </p>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-success rounded-pill fs-6">{{ resa.nb_places }} place(s)</span>
+                                {% if resa.concert.est_passe %}
+                                    <div class="text-danger small mt-1">Concert terminé</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="list-group-item text-center text-muted p-4">
+                            Vous n'avez pas encore réservé de billets.<br>
+                            <a href="{{ url_for('concerts') }}" class="btn btn-outline-success mt-3">Voir les concerts à venir</a>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
