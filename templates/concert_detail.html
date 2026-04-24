@@ -26,9 +26,23 @@
                     📍 Lieu : {{ concert.lieu }} <br>
                     📅 Date : Le {{ concert.date_concert.strftime('%d/%m/%Y à %H:%M') }}
                 </p>
+                {% if meteo %}
+                    <div class="alert alert-info mt-3 d-inline-block shadow-sm">
+                        <h6 class="mb-1 text-info-emphasis">🌤️ Prévisions Météo pour le jour J :</h6>
+                        <strong>{{ meteo.etat }}</strong> | Min: {{ meteo.min }}°C - Max: {{ meteo.max }}°C
+                    </div>
+                {% endif %}
                 
                 <hr>
                 <p class="fs-5">{{ concert.description }}</p>
+                {% if concert.avis_redacteur %}
+                    <div class="card border-success mt-4 bg-light">
+                        <div class="card-body">
+                            <h5 class="text-success">✏️ L'avis du rédacteur en chef</h5>
+                            <p class="fst-italic">"{{ concert.avis_redacteur }}"</p>
+                        </div>
+                    </div>
+                {% endif %}
                 
                 {% if concert.est_passe %}
                     <div class="alert alert-warning mt-4">Ce concert est déjà passé. Jetez un œil aux commentaires ci-dessous !</div>

@@ -22,6 +22,7 @@ class ConcertForm(FlaskForm):
     type_musique = StringField('Genre musical', validators=[DataRequired()])
     places_totales = IntegerField('Nombre de places totales', validators=[DataRequired()])
     description = TextAreaField('Description')
+    avis_redacteur = TextAreaField('Avis du rédacteur en chef (pour concerts passés)')
     submit = SubmitField('Enregistrer le concert')
 
 # Formulaire pour ajouter/modifier une actualité

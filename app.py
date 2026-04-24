@@ -4,6 +4,8 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from forms import RegistrationForm, LoginForm, ConcertForm, ActualiteForm, CommentaireForm
+import requests
+from datetime import timedelta
 
 # --- 1. CONFIGURATION ---
 app = Flask(__name__)
@@ -49,6 +51,7 @@ class Concert(db.Model):
     places_totales = db.Column(db.Integer, nullable=False)
     places_dispos = db.Column(db.Integer, nullable=False)
     description = db.Column(db.Text)
+    avis_redacteur = db.Column(db.Text)
     est_passe = db.Column(db.Boolean, default=False)
     reservations = db.relationship('Reservation', backref='concert', lazy=True)
     commentaires = db.relationship('Commentaire', backref='concert', lazy=True)
@@ -63,8 +66,11 @@ class Commentaire(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     contenu = db.Column(db.Text, nullable=False)
     date_post = db.Column(db.DateTime, default=datetime.utcnow)
+
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     concert_id = db.Column(db.Integer, db.ForeignKey('concert.id'), nullable=False)
+
+    user = db.relationship('User', backref=db.backref('commentaires', lazy=True))
 
 # --- 3. ROUTES ---
 
@@ -115,6 +121,12 @@ def init_data():
         flash("Les données existent déjà !", "warning")
         return redirect(url_for('index'))
 
+    admin_existe = User.query.filter_by(username='Admin').first()
+    if not admin_existe:
+        mdp_hash = generate_password_hash('admin')
+        compte_admin = User(username='Admin', password=mdp_hash, is_admin=True)
+        db.session.add(compte_admin)
+
     cat_jazz = Categorie(nom="Jazz")
     cat_rock = Categorie(nom="Rock")
     cat_electro = Categorie(nom="Electro")
@@ -126,15 +138,15 @@ def init_data():
     db.session.add_all([actu1, actu2])
 
     from datetime import datetime
-    c1 = Concert(nom="Arctic Monkeys", date_concert=datetime(2025, 7, 10, 20, 0), lieu="Lyon", type_musique="Rock", places_totales=5000, places_dispos=5000, description="La tournée européenne passe par la région !", est_passe=False)
-    c2 = Concert(nom="Daft Punk Tribute", date_concert=datetime(2025, 8, 15, 23, 0), lieu="Annecy", type_musique="Electro", places_totales=1500, places_dispos=1500, description="Une nuit inoubliable.", est_passe=False)
-    c3 = Concert(nom="Marcus Miller", date_concert=datetime(2023, 5, 20, 20, 30), lieu="Chambéry", type_musique="Jazz", places_totales=800, places_dispos=0, description="Concert exceptionnel du maître de la basse.", est_passe=True)
+    c1 = Concert(nom="Arctic Monkeys", date_concert=datetime(2026, 4, 28, 20, 0), lieu="Lyon", type_musique="Rock", places_totales=5000, places_dispos=4000, description="La tournée européenne passe par la région !", est_passe=False)
+    c2 = Concert(nom="Daft Punk Tribute", date_concert=datetime(2026, 8, 15, 23, 0), lieu="Annecy", type_musique="Electro", places_totales=1500, places_dispos=1500, description="Une nuit inoubliable.", est_passe=False)
+    # Correction de l'année 202 ici :
+    c3 = Concert(nom="Marcus Miller", date_concert=datetime(2026, 5, 7, 20, 30), lieu="Chambéry", type_musique="Jazz", places_totales=800, places_dispos=0, description="Concert exceptionnel du maître de la basse.", est_passe=True)
     db.session.add_all([c1, c2, c3])
 
     db.session.commit()
-    flash("Données de test générées avec succès ! 🎸", "success")
+    flash("Données de test et compte Admin générés avec succès ! 🎸", "success")
     return redirect(url_for('index'))
-
 # --- ROUTE DES CONCERTS ---
 @app.route('/concerts')
 def concerts():
@@ -286,6 +298,7 @@ def admin_edit_concert(id):
         concert.type_musique = form.type_musique.data
         concert.places_totales = form.places_totales.data
         concert.description = form.description.data
+        concert.avis_redacteur = form.avis_redacteur.data
         
         db.session.commit()
         flash("Le concert a bien été modifié !", "success")
@@ -320,29 +333,75 @@ def admin_edit_actualite(id):
 @app.route('/concert/<int:id>', methods=['GET', 'POST'])
 def concert_detail(id):
     concert = Concert.query.get_or_404(id)
-
     form = CommentaireForm()
-
+    
     if form.validate_on_submit():
         if not current_user.is_authenticated:
             flash("Vous devez être connecté pour commenter.", "danger")
             return redirect(url_for('login'))
             
-        nouveau_com = Commentaire(
-            contenu=form.contenu.data,
-            user_id=current_user.id,
-            concert_id=concert.id
-        )
+        nouveau_com = Commentaire(contenu=form.contenu.data, user_id=current_user.id, concert_id=concert.id)
         db.session.add(nouveau_com)
         db.session.commit()
         flash("Votre commentaire a bien été posté !", "success")
         return redirect(url_for('concert_detail', id=concert.id))
-
+        
     commentaires = Commentaire.query.filter_by(concert_id=concert.id).order_by(Commentaire.date_post.desc()).all()
     
-    return render_template('concert_detail.html', concert=concert, form=form, commentaires=commentaires)
+    # --- LOGIQUE MÉTÉO ---
+    meteo = None
+    maintenant = datetime.utcnow()
+    if not concert.est_passe and concert.date_concert > maintenant:
+        jours_restants = (concert.date_concert - maintenant).days
+        if jours_restants <= 15:
+            meteo = get_meteo(concert.lieu, concert.date_concert)
+            
+    return render_template('concert_detail.html', concert=concert, form=form, commentaires=commentaires, meteo=meteo)
 
+def get_meteo(ville, date_concert):
+    try:
+        geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={ville}&count=1&language=fr"
+        geo_rep = requests.get(geo_url).json()
+        
+        if not geo_rep.get('results'): 
+            return None
+            
+        lat = geo_rep['results'][0]['latitude']
+        lon = geo_rep['results'][0]['longitude']
+
+        meteo_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=Europe/Paris&forecast_days=16"
+        meteo_rep = requests.get(meteo_url).json()
+
+        date_str = date_concert.strftime('%Y-%m-%d')
+        if date_str in meteo_rep['daily']['time']:
+            idx = meteo_rep['daily']['time'].index(date_str)
+            t_max = meteo_rep['daily']['temperature_2m_max'][idx]
+            t_min = meteo_rep['daily']['temperature_2m_min'][idx]
+            code = meteo_rep['daily']['weathercode'][idx]
+
+            if code < 3: etat = "☀️ Ensoleillé"
+            elif code < 50: etat = "☁️ Nuageux"
+            elif code < 70: etat = "🌧️ Pluvieux"
+            else: etat = "⛈️ Orage / Neige"
+                
+            return {"max": t_max, "min": t_min, "etat": etat}
+    except:
+        return None
+    return None
+
+@app.route('/actualites')
+@app.route('/actualites/<int:id_cat>')
+def actualites(id_cat=None):
+    if id_cat:
+        categorie = Categorie.query.get_or_404(id_cat)
+        liste_actus = Actualite.query.filter_by(categorie_id=id_cat).order_by(Actualite.date_publication.desc()).all()
+        titre_page = f"Actualités {categorie.nom}"
+    else:
+        liste_actus = Actualite.query.order_by(Actualite.date_publication.desc()).all()
+        titre_page = "Toutes les Actualités"
+        
+    return render_template('actualites.html', actus=liste_actus, titre=titre_page)
 
 # --- 4. LANCEMENT ---
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0')
